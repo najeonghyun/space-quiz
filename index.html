@@ -628,7 +628,7 @@
         }
         shareStatus.classList.add("success");
       } catch (error) {
-        if (error.name === "AbortError") {
+        if (error && error.name === "AbortError") {
           shareStatus.textContent = "Sharing was canceled.";
         } else if (typeof navigator.share === "function") {
           shareStatus.textContent = "Couldn't open sharing. Please try again.";
