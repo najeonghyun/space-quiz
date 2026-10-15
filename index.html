@@ -235,7 +235,7 @@
       background: rgba(151, 121, 255, .08);
     }
 
-    .answer:focus-visible, .next-button:focus-visible, .restart-button:focus-visible {
+    .answer:focus-visible, .next-button:focus-visible, .share-button:focus-visible, .restart-button:focus-visible {
       outline: 3px solid var(--purple);
       outline-offset: 3px;
     }
@@ -285,7 +285,7 @@
       margin-top: 10px;
     }
 
-    .next-button, .restart-button {
+    .next-button, .share-button, .restart-button {
       display: none;
       align-items: center;
       justify-content: center;
@@ -304,8 +304,12 @@
       transition: transform .18s, filter .18s;
     }
 
-    .next-button:hover, .restart-button:hover { transform: translateY(-1px); filter: brightness(1.08); }
-    .next-button.visible, .restart-button { display: inline-flex; }
+    .next-button:hover, .share-button:hover, .restart-button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .next-button.visible, .share-button, .restart-button { display: inline-flex; }
+    .result-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+    .share-status { min-height: 24px; margin: 13px 0 0; color: var(--muted); font-size: 13px; }
+    .share-status.success { color: var(--green); }
+    .share-status.error { color: var(--red); }
 
     .card.shake { animation: shake .38s ease-in-out; }
 
@@ -411,7 +415,11 @@
         <h2 id="result-title"></h2>
         <p class="result-copy" id="result-copy"></p>
         <div class="final-score" id="final-score"></div>
-        <button class="restart-button" id="restart-button" type="button">Take the quiz again <span aria-hidden="true">↻</span></button>
+        <div class="result-actions">
+          <button class="share-button" id="share-button" type="button">Share your score <span aria-hidden="true">↗</span></button>
+          <button class="restart-button" id="restart-button" type="button">Take the quiz again <span aria-hidden="true">↻</span></button>
+        </div>
+        <p class="share-status" id="share-status" role="status" aria-live="polite"></p>
       </div>
     </section>
     <p class="footer-note">Made for curious minds, somewhere on Earth <span aria-hidden="true">🌍</span></p>
@@ -490,6 +498,8 @@
     const feedbackElement = document.getElementById("feedback");
     const nextButton = document.getElementById("next-button");
     const quizCard = document.getElementById("quiz-card");
+    const shareButton = document.getElementById("share-button");
+    const shareStatus = document.getElementById("share-status");
 
     function renderQuestion() {
       const item = questions[current];
@@ -549,6 +559,8 @@
       document.getElementById("quiz").hidden = true;
       const result = document.getElementById("result");
       result.classList.add("visible");
+      shareStatus.textContent = "";
+      shareStatus.className = "share-status";
       document.getElementById("progress-fill").style.width = "100%";
       document.getElementById("progress-track").setAttribute("aria-valuenow", String(questions.length));
 
@@ -573,6 +585,65 @@
       result.querySelector("h2").focus?.();
     }
 
+    function copyToClipboard(text) {
+      const fallbackCopy = () => {
+        const input = document.createElement("textarea");
+        input.value = text;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        document.body.appendChild(input);
+        input.select();
+        let copied = false;
+        try {
+          copied = document.execCommand("copy");
+        } finally {
+          input.remove();
+        }
+        return copied;
+      };
+
+      if (navigator.clipboard?.writeText) {
+        return navigator.clipboard.writeText(text).catch(() => {
+          if (!fallbackCopy()) throw new Error("Clipboard copy failed");
+        });
+      }
+      if (!fallbackCopy()) return Promise.reject(new Error("Clipboard copy failed"));
+      return Promise.resolve();
+    }
+
+    async function shareScore() {
+      const shareText = `I scored ${score} out of ${questions.length} on Orbit: Space Quiz! How well do you know space?`;
+      shareButton.disabled = true;
+      shareStatus.textContent = "";
+      shareStatus.className = "share-status";
+
+      try {
+        if (typeof navigator.share === "function") {
+          await navigator.share({ title: "Orbit: Space Quiz", text: shareText });
+          shareStatus.textContent = "Your score was shared!";
+        } else {
+          await copyToClipboard(shareText);
+          shareStatus.textContent = "Your score was copied to the clipboard!";
+        }
+        shareStatus.classList.add("success");
+      } catch (error) {
+        if (error.name === "AbortError") {
+          shareStatus.textContent = "Sharing was canceled.";
+        } else if (typeof navigator.share === "function") {
+          shareStatus.textContent = "Couldn't open sharing. Please try again.";
+          shareStatus.classList.add("error");
+        } else {
+          shareStatus.textContent = "Couldn't copy your score. Check clipboard access and try again.";
+          shareStatus.classList.add("error");
+        }
+      } finally {
+        shareButton.disabled = false;
+      }
+    }
+
+    shareButton.addEventListener("click", shareScore);
+
     nextButton.addEventListener("click", () => {
       current++;
       if (current >= questions.length) showResults();
@@ -585,6 +656,8 @@
       document.getElementById("score").textContent = "0";
       document.getElementById("quiz").hidden = false;
       document.getElementById("result").classList.remove("visible");
+      shareStatus.textContent = "";
+      shareStatus.className = "share-status";
       renderQuestion();
     });
 
